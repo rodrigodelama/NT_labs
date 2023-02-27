@@ -1,0 +1,606 @@
+---
+title: "Networks Theory - Lab 1"
+author: "Pablo Serrano, Ginés García Avilés, Iñaki Úcar, José Alberto Hernández"
+date: "Feb. 15, 2021"
+output:
+  html_document:
+    number_sections: yes
+    toc: true
+    toc_float:
+      collapsed: false
+    theme: united
+    highlight: textmate
+---
+
+```{r, echo = FALSE, message = FALSE}
+knitr::opts_chunk$set(fig.align = "center")
+set.seed(42)
+```
+
+Licensed under a [Creative Commons BY-NC-SA 4.0 License](http://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+# Introduction to R
+
+## R and Rstudio
+
+R is a programming language and software environment for statistical computing and graphics. The R language is widely used among statisticians and data miners, and several studies show that R's popularity has increased substantially in recent years.
+
+We will run R code using __RStudio__, which is an IDE that provides a friendly work environment, very similar to that of MATLAB. 
+
+
+## Installing R and R studio
+
+R can be downloaded from [The Comprehensive R Archive Network](https://cran.r-project.org), while the free version of Rstudio can be downloaded from the [download section of Rstudio](https://rstudio.com/products/rstudio/download/)
+
+
+## Programming environment
+
+We plan to use R from the graphical toolIts main window is divided in four areas, from ***top to bottom*** and from ***left to right***:
+
+* _Script_ editor. It is recommended to write R code here to save the progress throughout the session. Selecting parts of the text and clicking `Run` will trigger executing the selected part below (the console). 
+* Console. Here you can directly write R commands. 
+* Environment and History panels, where variables in use are displayed together with their current value.
+* _Hodgepodge_ panel composed of several tabs for: file browsing, figure display, package manager, etc.
+
+## R _basics_
+
+```{r}
+# This is a comment
+
+# Simple operation
+2^10 - 24
+3^3
+```
+
+Assignation operator: `<-` (`=` is also valid):
+
+```{r}
+# Assignation 
+x <- 1
+x = 1
+# both ways work
+```
+
+To put two commands in the same line a ***semi-colon*** must be used. By writing just the name of a variable the terminal outputs its value
+
+```{r}
+# Two commands in the same line
+x <- 2^10 - 24; x; x-3
+```
+
+Creating a ***Sequence***.
+
+```{r}
+# Simple sequence creation
+x <- 1:10; x
+
+# More complex sequence creation by using seq(first, last, step) function
+y <- seq(1, 2, 0.1); y
+
+# Sequence made up as a concatenation of different parts (1, 5, and seq(100, 110, 2)).
+z <- c(1, 5, seq(100, 110, 2)); z
+
+test <- seq(1, 10, 0.5); test
+```
+
+Accessing values on a sequence:
+
+```{r}
+# Sequence creation (steps of 1)
+x <- 1:10;
+
+# Accessing first value of the sequence
+x[1]
+x[3]
+
+test[10]
+
+```
+
+To display ***help about a function***, use ?:
+
+```{r}
+# Display help about concatenation function
+? seq
+
+```
+
+Functions definition:
+```{r}
+#  - n:     number of values of Fibonacci sequence to be calculated                                   (required)
+#  - full:  indicates whether we want the function to return the full sequence or just the n-th value (optional)  DEFAULT=FALSE
+fibonacci <- function(n, full=FALSE) {
+  # We reserve some memory for a numerical vector of length n
+  fibvals <- numeric(n)
+  
+  # First two values of Fibonacci's sequence
+  fibvals[1] <- 1
+  fibvals[2] <- 1
+  
+  # Loop to compute the next values
+  if (n > 2) {
+    x <- 3:n
+    for (i in x) { 
+      fibvals[i] <- fibvals[i-1] + fibvals[i-2]
+    }
+    
+  }
+  
+  # Default behavior: return just the n-th value
+  if (!full) {
+    return(fibvals[n])
+  } 
+  # If full=TRUE, return the whole sequence
+  else {
+    return(fibvals)
+  }
+}
+
+# Just the 10-th element
+fibonacci(10)
+ # The whole series until the 10-th element
+fibonacci(10, TRUE)
+
+fibonacci(8, TRUE)
+fibonacci(20, TRUE)
+```
+
+# Basic stats with R
+
+## Random number generation 
+
+The packages `base` and `stats` are available with the default R installation and provide many basic functions that are typically not available with other languages. 
+
+To take a look to the set of available distributions, just check the help:
+
+```{r}
+? distributions
+```
+
+For each distribution `xxx` there are four functions available:
+
+* `rxxx(n, ...)` generates $n$ samples following `xxx` distribution.
+* `dxxx(x, ...)` value of the density function $f(x)$ at the points specified by x (value of $\Pr(x)$ for the case of discrete random variables).
+* `pxxx(q, ...)` value of the cumulative distribution function (CDF) $F(q) = \int_{-\infty}^q f(x)dx$. 
+* `qxxx(p, ...)` value of the p-th quantile, i.e., the $q$ such that $F(q) = p$ (inverse of the cumulative distribution function).
+
+Example: Generation of 1000 samples of a $N(0,1)$ (gaussian of zero mean and variance 1) and representation of the results:
+
+```{r}
+# Random number generation from a normal distribution
+x <- rnorm(1000, 0, 1)
+
+# Representation of the results
+plot(x)
+
+y <- rnorm(1000, 0, 10) # (samples, mean, standard deviation)
+plot(y)
+
+y_exp <- rexp(1000, 2)
+plot(y_exp)
+```
+
+## Descriptive stats
+
+Values of the mean, median, variance and standard deviation:
+
+```{r}
+mean(x)
+median(x)
+var(x)
+sd(x)
+
+mean(y) #mean
+median(y) #median
+var(y) #variance
+sd(y) #standard deviation
+
+mean(y_exp)
+median(y_exp)
+var(y_exp)
+sd(y_exp)
+
+```
+
+The `summary` function is very versatile. It takes as input a large number of different types of data and provides a lot of information:
+
+```{r}
+? summary
+
+summary(x)
+
+summary(y)
+summary(y_exp)
+```
+
+
+## Density function
+
+Represents how a random variable is distributed. For example, the shape of a density function $f(x)$ of an $N(0,1)$ distribution has the classical Gaussian bell shape, centered in zero. This is the empirical distribution of the data set:
+
+```{r}
+# Empirical
+## Random number generation (from a normal distribution)
+x <- rnorm(1000, 0, 1)
+## Representation of the density function of the generated values
+plot(density(x))
+
+# Theoretical
+## We now overlap the theoretical density function of an N(0,1) using dnrom function.
+##    - add=TRUE  overlaps the curve to the latest plot already generated (instead of generating a new one)
+##    - col="red" color of the line
+##    - lty=2     shape of the line
+curve(dnorm(x, 0, 1), add=TRUE, lty=2, col="red")
+
+# My normal distribution
+plot(density(y)) #pdf of our y distribution
+curve(dnorm(x, 0, 10), add=TRUE, lty=2, col="red") # my rnorm was (1000, 0, 10)
+# My exponential distribution
+plot(density(y_exp))
+curve(dexp(x, 2), add=TRUE, lty=2, col="blue") # my rexp was (1000, 2)
+
+```
+
+## Cumulative distribution function
+
+Similarly, we can plot the empirical CDF together with the theoretical:
+
+```{r}
+# Empirical CDF
+x <- rnorm(1000, 0, 1)
+Fx <- ecdf(x)
+plot(x, Fx(x))
+
+# And overlap the theoretical F(x) using pnorm function
+curve(pnorm(x, 0, 1), add=TRUE, lty=2, col="red")
+
+Fy <- ecdf(y)
+plot(y, Fy(y))
+curve(pnorm(x, 0, 10), add=TRUE, lty=2, col="red")
+
+Fy_exp <- ecdf(y_exp)
+plot(y_exp, Fy(y_exp))
+curve(pexp(x, 2), add=TRUE, lty=2, col="red")
+```
+
+
+## Q-Q Plots
+
+Another tool to analyse and compare two distributions is through the use of Q-Q plots. Q stands for quantile, and the analysis consists on visually comparing the values of the same quantiles for two different sets of data. It compares the growth of two data sets. If the result is a line with zero offset and slope 1, then both sets have a similar shape, and therefore they probably follow the same random variable.
+
+### Example 1
+
+Generate 1000 samples of an uniform distribution beween 0 and 1 (square pulse) and compare empirical and theoretical density functions:
+
+```{r}
+# Empirical
+x <- runif(1000, 0, 1)
+plot(density(x))
+
+# Theoretical
+curve(dunif(x, 0, 1), add=TRUE, lty=2, col="red")
+```
+
+Looking at the figure, is difficult to conclude that our data set follow the theoretical distribution just looking at the density functions (check the estimated values around the zero and one). Let's now check the Q-Q plot: 
+
+```{r}
+# Q-Q plot generation # comparing the two functions value by value
+qqplot(x, runif(length(x), 0, 1))
+
+# Plots a line with zero offset and slope 1
+abline(0, 1, lty=2, col="red")
+```
+
+In this case, we can see that both datasets grow in a similar way. Hence, both data sets probably follow the same random variable. 
+
+### Example 2
+
+Generate 2 sets of 1000 samples from an exponential distribution and the addition of three uniform distributions. 
+
+```{r}
+x <- rnorm(1000, 0, 1)
+y <- runif(1000, -1, 1) + runif(1000, -1, 1) + runif(1000, -1, 1)
+```
+
+If we only compare the cumulative distribution function, they may look similar:
+```{r}
+plot(ecdf(x))
+lines(ecdf(y), col='blue')
+```
+
+But the Q-Q plot shows that they are not the same, as they deviate from the $y=x$ line: 
+```{r}
+qqplot(x, y)
+abline(0, 1, lty=2, col="red")
+```
+
+To confirm that these differences are not just because of randomness (note that both low and high quartiles might be strongly affected by a few samples), we can increase the number of samples and therefore the precision:
+
+```{r}
+x <- rnorm(100000, 0, 1)
+y <- runif(100000, -1, 1) + runif(100000, -1, 1) + runif(100000, -1, 1)
+qqplot(x, y)
+abline(0, 1, lty=2, col="red")
+```
+
+It is recommended to analyze the impact of changing a given parameter of one random set (e.g. the mean, or the variance) on the resulting Q-Q plot. 
+
+# Bayes' theorem (optional)
+
+The conditional probability of A given B is defined as
+
+$$\Pr(A | B) = \frac{\Pr(A \cap B)}{\Pr(B)}$$
+
+Correspondingly, 
+
+$$\Pr(B | A) = \frac{\Pr(A \cap B)}{\Pr(A)}$$
+
+Based on the above, the probability of both events A and B can be expressed as
+
+$$ \Pr(A \cap B) = \Pr(A | B)\Pr(B) = \Pr(B | A)\Pr(A)$$
+
+which results in the well-known __Bayes' theorem__:
+
+$$ \Pr(A | B) = \frac{\Pr(B | A)\Pr(A)}{\Pr(B)}$$
+
+> _Bayes's theorem is to the theory of probability what Pythagoras's theorem is to geometry_.
+> (Sir Harold Jeffreys)
+
+We next illustrate the usefulness of the theorem with an example. Assume there is a test to detect a certain illness which has 1 every 10.000 people. The sensitivity (probability of detection) of the test is 0.99 and its specificity (i.e., probability of negative result in healthy individuals) is 0.99. 
+
+Given that the result of the test is positive, what is the probability of being ill? To sum up, there is the following data available so far:
+
+* Probability of being ill: $\Pr(\mathrm{ill}) = 1/10000 = 0.0001$.
+* Probability of a positive result given the individual is ill (sensitivity): $\Pr(+ | \mathrm{ill}) = 0.99$.
+* Probability of a negative result given the individual is healthy: $\Pr(- | \mathrm{healthy}) = 0.99$.
+
+The objective is to compute the probability of having the illness given that the result of the test was positive. According to Bayes' theorem:
+
+$$ \Pr(\mathrm{ill} | +) = \frac{\Pr(+ | \mathrm{ill})\Pr(\mathrm{ill})}{\Pr(+)}$$
+
+To compute the probability of the test resulting positive: 
+
+$$\begin{aligned}
+\Pr(+) &= \Pr(+ | \mathrm{ill})\Pr(\mathrm{ill}) +  \Pr(+ | \mathrm{healthy})\Pr(\mathrm{healthy}) \\
+      &= \Pr(+ | \mathrm{ill})\Pr(\mathrm{ill}) +  \left(1-\Pr(- | \mathrm{healthy})\right)\left(1-\Pr(\mathrm{healthy})\right) \\
+      & = 0.99\cdot0.0001 + (1-0.99)\cdot(1-0.0001) = 0.010098
+\end{aligned}$$
+
+Therefore the result is
+
+$$ \Pr(\mathrm{ill} | +) = \frac{0.99\cdot0.0001}{0.010098} \approx 0.01 $$
+
+To confirm this (conter-intuitive but) low value, we will run some simulations with the help of R. 
+
+```{r}
+# Function to generate healthy/ill data
+population <- function(n) {
+  # Vector (TRUE/FALSE)
+  sick <- runif(n) < 0.0001
+  people_df <- data.frame(sick)
+  return(people_df)
+}
+
+# Next, we specify a function that emulates the result of a test
+# with the performance described above
+test <- function(people_df, sensitivity, specificity) {
+  random <- runif(nrow(people_df))
+  people_df$testedPositive <- (people_df$sick & (random < sensitivity)) |
+                           (!people_df$sick & (random > specificity))
+  return(people_df)
+}
+
+# We generate a population similar in size to Madrid
+madrid <- population(3000000)
+# The result is a one-column data frame storing who is sick
+head(madrid)
+
+# Everybody is tested
+madrid <- test(madrid, 0.99, 0.99)
+# A new column indicates whether each test was positive
+head(madrid)
+
+# And now we compute the amount of individuals with the illness that got
+# a positive result form the test
+positive <- subset(madrid, testedPositive)
+positiveAndSick <- subset(madrid, testedPositive & sick)
+nrow(positiveAndSick) / nrow(positive)
+```
+
+And this is the reason why these tests are repeated. 
+
+It is left as an exercise for the reader to repeat the test multiple times over those identified as positive. 
+What is the probability of having the illness if a second test is also positive? And a third test? What is more important, sensitivity or specificity? Why?
+
+```{r, eval=FALSE, echo=FALSE}
+# sensitivity: portion of actual positives correctly identified as such (lo tiene y decimos que lo tiene)
+# specificity: portion of negatives corretly identified as such (no lo tiene y decimos que no lo tiene)
+# Tiene mas impacto la especificidad
+
+# Repetimos el test un par de veces más
+positive1 <- subset(madrid, testedPositive)
+positive1 <- test(positive1, 0.99, 0.99)
+positive2 <- subset(positive1, testedPositive)
+positive2 <- test(positive2, 0.99, 0.99)
+positive3 <- subset(positive2, testedPositive)
+
+nrow(subset(positive1, testedPositive & sick)) / nrow(positive2) # ~ 0.50
+nrow(subset(positive2, testedPositive & sick)) / nrow(positive3) # ~ 0.99
+```
+
+
+
+# Solving problems with R
+
+## Exercise 1.7
+
+> Assume that in a given network, traffic generation follows the models described in the table below, where the first column describes the traffic type, the second column the distribution of the length of datagrams, and the third column the relative amount of each type of dataframe. 
+
+> **1. Compute the expected lenght of a datagram picked at random**.
+
+Application | Length (B)      |  % 
+------------|-----------------|----
+Skype       | $U(50,150)$     |  5 
+P2P         | $U(1000, 1500)$ | 60 
+Web         | $exp(1/1000)$   | 25 
+email       | $N(800,100)$    | 10 
+
+
+To solve this problem with R, we first generate a number of samples from each random variable, with the corresponding weigth (third column), and mix them with `sample`:
+
+```{r}
+# Total number of samples to be generated
+N <- 1000
+# Generate a vector of samples
+pkts <- sample(c(
+  runif(0.05 * N, 50, 150),
+  runif(0.60 * N, 1000, 1500),
+  rexp (0.25 * N, 1/1000),
+  rnorm(0.10 * N, 800, 100)
+))
+```
+
+With the above, we plot the estimated density function and the average:
+
+```{r}
+plot(density(pkts))
+abline(v=mean(pkts), lty=2, col="red")
+mean(pkts)
+
+more_1100 <- pkts[pkts>1100]; more_1100
+plot(density(more_1100))
+mean(more_1100)
+```
+
+According to the figure, the density function cannot be related to any other classical continuous random variable (e.g., it is multi-modal). Thanks to the central limit theorem, the sample average should follow a normal distribution, so if we repeat the above procedure many times the distribution of the obtained sample averages should resemble a gaussian distribution. 
+
+While the above could be done with a `for` statement, with R there are tools to replace loops by functions. In this case, we can use `sapply` to apply the same function over a vector and produce a vector of results. To repeat the above procedure 1000 times, we can use the following code:
+
+```{r}
+# Calculates the average of the sample
+gen <- function(i) {
+  pkts <- sample(c(
+    runif(0.05 * N, 50, 150),
+    runif(0.60 * N, 1000, 1500),
+    rexp (0.25 * N, 1/1000),
+    rnorm(0.10 * N, 800, 100)
+  ))
+  return(mean(pkts))
+}
+# Sapply method calls 1000 times gen() method, storing all the results in a vector
+pkts_avgs <- sapply(1:1000, gen)
+```
+
+The resulting variable `pkts_avgs` has the averages of the 1000 repetitions. We can confirm via visual inspection that the estimated density function follows the gaussian one:
+
+```{r}
+plot(density(pkts_avgs))
+```
+
+and the average is very close to the correct answer: 
+```{r}
+mean(pkts_avgs)
+```
+
+Furthermore we can run a [Student t-test](https://en.wikipedia.org/wiki/Student%27s_t-test), to have an estimation of the average value with a confidence interval:
+
+```{r}
+t <- t.test(pkts_avgs)
+t
+# Solution: 1085
+plot(density(pkts_avgs))
+abline(v=t$estimate, lty=2, col="red")
+abline(v=t$conf.int)
+```
+
+
+Try to solve the second question
+
+> ***2. Compute the average length of datagrams whose type is not P2P.***
+
+
+## Exercise 1.8
+> Given two independent random variables $\mu_1$ and $\mu_2$ uniformly distributed between 0 and 1. Compute the expectation of the random variable defined as the minimum of them.
+
+$$E[min(\mu_1, \mu_2)]$$
+
+Thanks to the `pmin` function it is easy to compute the minimum of a pair of values, each one from a different vector. It is easy to confirm that this minimum does not follow a uniform distribution
+
+```{r}
+u1 <- runif(1000, 0, 1)
+u2 <- runif(1000, 0, 1)
+
+umin <- pmin(u1, u2)
+plot(density(umin))
+```
+
+And the average is close to 1/3
+```{r}
+mean(umin)
+```
+
+Like in the previous case, we can repeat the above a number of times with the use of `sapply`
+```{r}
+f <- function(i){
+  u1 <- runif(1000, 0, 1)
+  u2 <- runif(1000, 0, 1)
+  return(mean(pmin(u1, u2)))  
+}
+out <- sapply(1:1000, f)
+t <- t.test(out)
+t
+```
+
+
+Try to solve the following: 
+
+> ***Exercise 1.5. Compute the density function of the random variable defined as the minimum of three independent random variables, each one uniformly distributed between 0 and 1 ***
+
+
+
+## Exercise 1.9
+
+> 40\% of the network packets suffer network delay that can be modeled with a random variable uniformly distributed between $10~ms$ and $70~ms$, and the remaining 60\% suffer a delay modeled by an exponential random variable of mean $30~ms$. Compute the average delay of those packets with more than $50~ms$ of delay.
+
+One could start by computing the delay in the network, and estimating its mean and density function
+```{r}
+N <- 10000
+delay <- sample(c(
+    runif(0.40 * N, 10, 70),
+    rexp (0.60 * N, 1/30)
+  ))
+plot(density(delay))
+```
+
+```{r}
+mean(delay)
+```
+
+But we are interested only in those samples with a delay longer than 50 ms. These can be selected as follows
+```{r}
+delay50 <- delay[delay>50]
+plot(density(delay50))
+```
+
+And the average is obviously above 50 ms:
+```{r}
+mean(delay50)
+```
+
+As in the previous cases, 
+```{r}
+delay_threshold <- 50
+lambda <- 1/30
+get_avg <- function(x){
+  u1 <- runif(4000, 10, 70)
+  e1 <- rexp(6000, lambda)
+  u1 <- u1[u1>50]
+  e1 <- e1[e1>50]
+  # combine and randomize generated data
+  samples <- sample(c(u1, e1))
+  return(mean(samples))
+}
+
+average <- sapply(1:1000, get_avg)
+mean(average)
+```

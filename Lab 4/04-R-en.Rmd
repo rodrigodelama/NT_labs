@@ -1,0 +1,508 @@
+---
+title: "Networks Theory - Lab 4"
+author: "Iñaki Úcar, Pablo Serrano, José Alberto Hernández, Ginés García Avilés"
+date: "22 de abril de 2020"
+output:
+  html_document:
+    number_sections: yes
+    toc: true
+    toc_float:
+      collapsed: false
+    theme: united
+    highlight: textmate
+---
+
+```{r, echo = FALSE, message = FALSE}
+knitr::opts_chunk$set(fig.align = "center")
+set.seed(42)
+```
+
+<script type="text/x-mathjax-config">
+  MathJax.Ajax.config.path["Contrib"] = "https://cdn.mathjax.org/mathjax/contrib";
+  MathJax.Hub.Config({
+    TeX: {extensions: ["[Contrib]/xyjax/xypic.js","AMSmath.js","AMSsymbols.js"]},
+    tex2jax: {inlineMath: [["$","$"],["\\(","\\)"]]}
+  });
+</script>
+
+Licensed under a [Creative Commons BY-NC-SA 4.0 License](http://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+# Queueing systems
+
+In this tutorial, we will continue using DES techniques and the `simmer` package for this tutorial. Check the [previous tutorial](04-R-en.html) if you need to recall the _Introduction to DES with R_.
+
+```{r, message=FALSE}
+library(simmer)
+library(simmer.plot)
+```
+
+## M/M/1 system
+
+An M/M/1 system has exponential arrivals (__M__/M/1), a single server (M/M/__1__) with exponential service time (M/__M__/1) and an inifinite queue (implicit M/M/1/__$\infty$__). For instance, people arriving at an ATM at rate $\lambda$, waiting their turn in the street and withdrawing money at rate $\mu$.
+
+Let us remember the basic parameters of this system:
+
+$$\begin{aligned}
+\rho &= \frac{\lambda}{\mu} &&\equiv \mbox{Server utilization} \\
+N &= \frac{\rho}{1-\rho} &&\equiv \mbox{Average number of customers in the system (queue + server)} \\
+T &= \frac{N}{\lambda} &&\equiv \mbox{Average time in the system (queue + server) [Little's law]} \\
+\end{aligned}$$
+
+Whenever $\rho < 1$. If that is not the case, it means that the system is unstable: there are more arrivals than the server is capable of handling, and the queue will grow indefinitely.
+
+The simulation of an M/M/1 system is immediate starting from the example in section 1:
+
+```{r}
+lambda <- 2
+mu <- 4
+rho <- lambda/mu # = 2/4
+
+m.queue <- trajectory() %>%
+  seize("server", amount=1) %>%
+  timeout(function() rexp(1, mu)) %>%
+  release("server", amount=1)
+
+mm1.env <- simmer() %>%
+  add_resource("server", capacity=1, queue_size=Inf) %>%
+  add_generator("arrival", m.queue, function() rexp(100, lambda)) %>%
+  run(4000/lambda)
+
+mm1.df.res <- get_mon_resources(mm1.env)
+mm1.df.arr <- get_mon_arrivals(mm1.env)
+
+# Theoretical value (avg num. of users in the system)
+mm1.N <- rho/(1-rho)
+
+# Evolution of the average number of customers in the system + Theoretical value
+plot(mm1.df.res, metric="usage", "server", items="system") + 
+  geom_hline(yintercept = mm1.N)
+```
+
+Experimentally, we obtain the time spent by each customer. From here, we obtain the average time, which matches (approx.) the theoretical one:
+
+```{r}
+mm1.t_system <- mm1.df.arr$end_time - mm1.df.arr$start_time
+mean(mm1.t_system) ; mm1.N/lambda
+```
+
+The inverse of the mean difference between arrivals is the effective rate, which matches (approx.) the real lambda, because there are no rejections:
+
+```{r}
+mm1.df.arr.finished <- subset(mm1.df.arr, finished == TRUE)
+
+# Effective rate
+1/mean(diff(mm1.df.arr.finished$start_time)) ; lambda
+
+# Rejection rate
+1 - nrow(mm1.df.arr.finished) / nrow(mm1.df.arr)
+```
+
+Moreover, an M/M/1 satisfies that the distribution of the time spent in the system is, in turn, an exponential random variable with mean $T$:
+
+```{r}
+qqplot(mm1.t_system, rexp(1000, lambda/mm1.N))
+abline(0, 1, lty=2, col="red")
+```
+
+## M/M/1/k systems
+The **M/M/1/K** system is similar to M/M/1, but the maximum number of users in the sistem is limited by **k**. Therefore, the maximum length of the queue is **k-1**, given that we can store a user at the resource. The M/M/1/k systems are suitable to model situations where we have limited capacity (transmission system with limited buffer space, ...). Starting from **Example 1**, we define a system with 1 resource and 2 users at most in the system:
+
+```{r}
+
+lambda <- 2
+mu <- 4
+
+# Total number of users in the system = users in queue + users at the resources
+k <- 2
+
+# Number of resources
+m12_capacity = 1
+
+# Queue size
+m12_queue_size = 1
+
+# Trajectory defined previously
+m12.queue <- trajectory() %>%
+  seize("server", amount=1) %>%
+  timeout(function() rexp(1, mu)) %>%
+  release("server", amount=1)
+
+# Simulator
+mm12.env <- simmer() %>%
+  add_resource("server", capacity=m12_capacity, queue_size=m12_queue_size) %>%
+  add_generator("arrival", m12.queue, function() rexp(200, lambda)) %>%
+  run(4000/lambda)
+
+mm12.df.res <- get_mon_resources(mm12.env)
+mm12.df.arr <- get_mon_arrivals(mm12.env)
+```
+
+
+### Probabilities
+```{r}
+# Probability of the system to be empty
+## Theoretical
+I <- lambda/mu
+n <- 0
+pn <- ((1-I)*(I^n))/(1-I^(k+1))
+pn
+
+## simmer
+deltas <- diff(mm12.df.res$time)
+empty <- which(mm12.df.res$system == 0)
+t_empty <- deltas[empty]
+sum(t_empty, na.rm=TRUE) / max(mm12.df.res$time)
+
+# Probability of the system to be full
+## Theoretical
+I <- lambda/mu
+n <- k
+pk <- ((1-I)*(I^n))/(1-I^(k+1))
+pk
+
+## simmer
+deltas <- diff(mm12.df.res$time)
+busy <- which(mm12.df.res$system == 2)
+t_busy <- deltas[busy]
+pk_simmer <- sum(t_busy, na.rm=TRUE) / max(mm12.df.res$time)
+pk_simmer
+## or
+pk_simmer_2 <- sum(!mm12.df.arr$finished) / nrow(mm12.df.arr)
+pk_simmer_2
+
+```
+
+### Effective rate
+```{r}
+# Theoretical
+lambda_effect <- lambda*(1-pk)
+lambda_effect
+
+# simmer
+lambda_effect_simmer <- lambda * (1 - pk_simmer)
+lambda_effect_simmer
+```
+
+### Average number of users
+```{r}
+# Theoretical
+N <- (I/(1-I)) - (k+1)*(I^(k+1))/(1-(I^(k+1)))
+N
+
+# simmer
+deltas_2 <- diff(mm12.df.res$time)
+deltas_2 <- c(deltas_2, 0)
+## number of users at each time interval times the amount of time the system was with that number of users
+res <- mm12.df.res$system * deltas_2
+N_simmer <- sum(res, na.rm=TRUE) / max(mm12.df.res$time)
+N_simmer
+```
+
+### Average time in the system
+```{r}
+# Teórico
+T <- N/lambda_effect
+T
+
+#simmer
+mm12.t_system <- mm12.df.arr$end_time - mm12.df.arr$start_time
+mean(mm12.t_system)
+```
+
+## M/M/m/k systems
+
+An M/M/c/k system has exponential arrivals and service times, but **has more than one server** (in general) and a **finite queue**. For instance, a router may have several processors to handle packets, and the  queues are finite.
+
+This is the simulation of an **M/M/2/4** system (2 servers, 2 positions in queue) following with **Example 1**. Note that the trajectory is identical to the M/M/1 and M/M/1/k cases.
+
+
+```{r}
+lambda <- 2
+mu <- 4
+m <- 2
+capacity <- 2
+queue_size <- 2
+k <- 4
+
+m13.queue <- trajectory() %>%
+  seize("server", amount=1) %>%
+  timeout(function() rexp(1, mu)) %>%
+  release("server", amount=1)
+
+mm13.env <- simmer() %>%
+  add_resource("server", capacity=capacity, queue_size=queue_size) %>%
+  add_generator("arrival", m13.queue, function() rexp(100, lambda)) %>%
+  run(4000/lambda)
+
+mm13.df.res <- get_mon_resources(mm13.env)
+mm13.df.arr <- get_mon_arrivals(mm13.env)
+```
+
+Similarly to the previous section, we will be able to compute probabilities, effective rate, average number of users in the system and average time in the system.
+
+# Example: Communication Networks design
+## Approach
+
+Let us consider a mobile operator that wants to provide cellular coverage in an area of 10 km$^2$. To do this, the area has to be divided in $N$ parcels, and each parcel accommodates one base station (BS). There are two types of BS regarding the number of channels (phone calls that can be undertaken at the same time) and the cost:
+
+Base Station          | A      | B
+----------------------|--------|--------
+Number of channels    | 2      | 3
+Cost per unit (€)     | 10.000 | 15.000
+
+<div style="float:right" markdown="1">
+![cells](img/cells.png)
+</div>
+
+We know that customers are uniformly distributed with a density of 10 customers per km$^2$. Each of them generates phone calls following a Poisson process with rate 2 calls per hour at the peak hour. Thus, 
+
+$$\lambda = 10 \cdot 10 \cdot 2 = 200$$
+
+The calls have an average duration of 3 minutes:
+
+$$\mu = \frac{60}{3} = 20$$
+
+We consider that any incoming call will be rejected if the BS has no channels available, and that the customer will not retry the call. Under these premises, a base station can be modelled using an M/M/m/m system, where $m$ is the number of channels and there is no queue. 
+
+We want to choose through simulation one BS type for the deployment, **(a) or b)**. We will find the number of base stations required **at the minimum cost** if we impose a rejection rate (calls that cannot be undertaken) lower than 5%.
+
+## Solution 
+
+First of all, we define a function which, given a number of channels, computes the number of stations required to accomplish the rejection rate. To this aim, we simulate a single base station which receives a traffic intensity equal to $\lambda$ divided by the number of deployed base stations. Then, we are going to perform 10 iterations for each type of station considering 1000 calls when simulating:
+
+```{r}
+station_a_channels <- 2
+station_a_cost <- 10000
+
+station_b_channels <- 3
+station_b_cost <- 15000
+
+lambda <- 200
+mu <- 20
+
+calls <- 1000
+
+m14.queue <- trajectory() %>%
+  seize("server", amount=1) %>%
+  timeout(function() rexp(1, mu)) %>%
+  release("server", amount=1)
+
+find_n_stations <- function(channels, start=1) {
+  
+  stations <- start
+  
+  while (TRUE) {
+    cell.arr <- simmer() %>%
+      add_resource("server", capacity=channels, queue_size=0) %>%
+      add_generator("arrival", m14.queue, function() rexp(100, lambda/stations)) %>%
+      run(calls*stations/lambda) %>%
+      get_mon_arrivals()
+    
+    # Rejection rate
+    rej_rate <- sum(!cell.arr$finished) / nrow(cell.arr)
+    
+    if (rej_rate < 0.05){
+      break;
+    } 
+    
+    stations <- stations + 1
+  }
+  return(stations)
+}
+
+c_a <- c()
+c_b <- c()
+for( i in c(1:10)){
+  c_a <- c(c_a, find_n_stations(station_a_channels))
+  c_b <- c(c_b, find_n_stations(station_b_channels))
+}
+avg_a_stations <- mean(c_a)
+avg_b_stations <- mean(c_b)
+
+avg_a_stations
+avg_b_stations
+```
+
+After running some experiments, we can see that the average number of station is greater than 20 for (a) type stations and greater than 10 for (b) stations. Therefore, we can perform more tests optimizing the searching procedure by setting the `start` parameter with those values.
+
+
+```{r}
+c_a <- c()
+c_b <- c()
+for( i in c(1:10)){
+  c_a <- c(c_a, find_n_stations(station_a_channels, start = 20))
+  c_b <- c(c_b, find_n_stations(station_b_channels, start = 10))
+}
+avg_a_accurate <- mean(c_a)
+avg_b_accurate <- mean(c_b)
+avg_a_accurate; avg_b_accurate
+
+cost_a <- avg_a_accurate * 10000
+cost_b <- avg_b_accurate * 15000
+
+cost_a; cost_b
+
+```
+
+The results show that, in average, it is required to use more than **25 "(a)" type stations** and more than **11 "(b)" type stations**, being the latter the cheapest option.
+
+
+# Solving problems with R
+
+## Problema 7.7
+
+> Assume a fast food restaurants where clients sit on one of the only two available stools. The clients arrive according to a Poisson process of rate 10 clients/hour, if there is no stool available they leave, and the time they spend at the bar can be modeled with a random exponential variable of average 12 minutes. Under these conditions, each customer pays on average 30€. The owner is thinking about adding another stool, but s/he's afraid that customers would then pay 25€ instead. **Compute**:
+>
+>* the probability that the bar is empty in both situations
+>* will the owner make more money by expanding the bar?
+
+```{r, eval=FALSE, echo=TRUE}
+#M/M/Resources/capacity
+
+lambda <- 10
+mu <- 5
+rho <- lambda/mu
+
+m77.queue <- trajectory() %>%
+  seize("taburete", amount=1) %>%
+  timeout(function() rexp(1, mu)) %>%
+  release("taburete", amount=1)
+
+############################
+############ a) ############
+############################
+
+## 2 stools
+
+mm77_2.df.res <- lapply(1:50, function(i) {
+  simmer() %>%
+    add_resource("taburete", capacity=2, queue_size=0) %>%
+    add_generator("arrival", m77.queue, function() rexp(100, lambda)) %>%
+    run(2000/lambda)
+}) %>% get_mon_resources()
+
+## Theoretical result = 0.2
+res <- c()
+for(i in c(1:50)){
+  temp <- mm77_2.df.res[which(mm77_2.df.res$replication == i), ]
+  
+  deltas <- diff(temp$time)
+  busy <- which(temp$system == 0)
+  t_busy <- deltas[busy]
+  res <- c(res, sum(t_busy, na.rm=TRUE) / max(temp$time))
+}
+mean(res)
+
+
+## 3 stools
+mm77_3.df.res <- lapply(1:50, function(i) {
+  simmer() %>%
+    add_resource("taburete", capacity=3, queue_size=0) %>%
+    add_generator("arrival", m77.queue, function() rexp(100, lambda)) %>%
+    run(2000/lambda)
+}) %>% get_mon_resources()
+
+## Theoretical = 0.157
+res <- c()
+for(i in c(1:50)){
+  temp <- mm77_3.df.res[which(mm77_3.df.res$replication == i), ]
+  
+  deltas <- diff(temp$time)
+  busy <- which(temp$system == 0)
+  t_busy <- deltas[busy]
+  res <- c(res, sum(t_busy, na.rm=TRUE) / max(temp$time))
+}
+mean(res)
+
+############################
+############ b) ############
+############################
+
+## 2 stools
+
+mm2.df.arr <- lapply(1:50, function(i) {
+  simmer() %>%
+    add_resource("taburete", capacity=2, queue_size=0) %>%
+    add_generator("arrival", m77.queue, function() rexp(100, lambda)) %>%
+    run(2000/lambda)
+}) %>% get_mon_arrivals()
+
+rej_rate_2 <- sum(!mm2.df.arr$finished) / nrow(mm2.df.arr)
+
+lambda * (1 - rej_rate_2) * 30
+
+## 3 stools
+mm3.df.arr <- lapply(1:50, function(i) {
+  simmer() %>%
+    add_resource("taburete", capacity=3, queue_size=0) %>%
+    add_generator("arrival", m77.queue, function() rexp(100, lambda)) %>%
+    run(2000/lambda)
+}) %>% get_mon_arrivals()
+
+rej_rate_3 <- sum(!mm3.df.arr$finished) / nrow(mm3.df.arr)
+
+lambda * (1 - rej_rate_3) * 25
+
+```
+
+## Problema 7.8
+>A telephone exchange serves a municipality of 30 000 Curso 17/18 - mayo inhabitants. It is estimated that each inhabitant makes, on average, one call every 30 days, and that the duration of these calls can be modelled with an exponential random variable with average of 4 minutes and 30 seconds. If the exchange has 6 circuits (i.e., it supports up to 6 simultaneous calls), **compute**:
+>
+>* The probability that a call will be rejected.
+>* The average number of circuits occupied.
+
+
+```{r, eval=FALSE, echo=TRUE}
+#M/M/Resources/capacity
+
+lambda <- 125/3
+mu <- 40/3
+rho <- lambda/mu
+
+m78.queue <- trajectory() %>%
+  seize("circuito", amount=1) %>%
+  timeout(function() rexp(1, mu)) %>%
+  release("circuito", amount=1)
+
+############################
+############ a) ############
+############################
+
+mm78.df.res <- lapply(1:50, function(i) {
+  simmer() %>%
+    add_resource("circuito", capacity=6, queue_size=0) %>%
+    add_generator("arrival", m78.queue, function() rexp(200, lambda)) %>%
+    run(2000/lambda)
+}) %>% get_mon_resources()
+
+### Theoretical = 0.059
+res <- c()
+for(i in c(1:50)){
+  temp <- mm78.df.res[which(mm78.df.res$replication == i), ]
+  deltas <- diff(temp$time)
+  busy <- which(temp$system == 6)
+  t_busy <- deltas[busy]
+  res <- c(res, sum(t_busy, na.rm=TRUE) / max(temp$time))
+}
+mean(res)
+
+############################
+############ b) ############
+############################
+
+## Theoretical 2.94
+## Compute the average number of circuits occupied for each repetition
+results <- c()
+for(i in c(1:50)){
+  temp <- mm78.df.res[which(mm78.df.res$replication == i), ]
+  
+  deltas_78 <- diff(temp$time)
+  deltas_78 <- c(deltas_78, 0)
+  
+  res <- temp$system * deltas_78
+  
+  results <- c(results, (sum(res, na.rm=TRUE) / max(temp$time)))
+}
+mean(results)
+
+```

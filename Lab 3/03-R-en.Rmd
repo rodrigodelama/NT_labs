@@ -1,0 +1,450 @@
+---
+title: "Networks Theory - Lab 3"
+author: "Iñaki Úcar, Pablo Serrano, José Alberto Hernández, Ginés García Aviles, Jesús Pérez-Valero"
+date: "Mar. 23, 2020"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_float:
+      collapsed: no
+    theme: united
+    highlight: textmate
+  pdf_document:
+    toc: yes
+---
+
+```{r, echo = FALSE, message = FALSE}
+knitr::opts_chunk$set(fig.align = "center")
+set.seed(42)
+```
+
+<script type="text/x-mathjax-config">
+  MathJax.Ajax.config.path["Contrib"] = "https://cdn.mathjax.org/mathjax/contrib";
+  MathJax.Hub.Config({
+    TeX: {extensions: ["[Contrib]/xyjax/xypic.js","AMSmath.js","AMSsymbols.js"]},
+    tex2jax: {inlineMath: [["$","$"],["\\(","\\)"]]}
+  });
+</script>
+
+Licensed under a [Creative Commons BY-NC-SA 4.0 License](http://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+# Discrete-time Markov chains
+
+## Introduction
+
+We plan to use the `markovchain` library, by Giorgio Alfredo Spedicato, to deal with Markov chains in R. This first section is devoted to introduce its classes and methods using a simple weather prediction model (W: warm, C: cold):
+
+$$\xymatrix{
+*=<5mm,5mm>[o][F]{W} \ar@(ul,dl)[]_{0.6} \ar@/^/[r]^{0.4} &
+*=<5mm,5mm>[o][F]{C} \ar@(dr,ur)[]_{0.7} \ar@/^/[l]^{0.3}
+}\qquad\qquad
+P = \begin{pmatrix}
+0.6 & 0.4 \\
+0.3 & 0.7
+\end{pmatrix}$$
+
+This intro was based on the [official documentation](http://cran.r-project.org/web/packages/markovchain/vignettes/an_introduction_to_markovchain_package.pdf).
+
+First of all, we need to import the new library to get access to it. The following line is equivalent to C's `#include` or Python's `import`:
+
+```{r, message=FALSE}
+library(markovchain)
+```
+
+## Transition matrix definition
+
+To start with, we define the transition matrix of the example above using the function `matrix` (see `?matrix`). The components are arranged in a plain vector, so we must specify one dimension at least (number of rows or columns) and tell how to read this vector (by rows or columns). In our example, we define a 2x2 matrix (`ncol = 2`) by rows (`byrow = TRUE`):
+
+```{r}
+P <- matrix(data = c(0.6, 0.4,
+                     0.3, 0.7), 
+            ncol = 2, byrow = TRUE)
+```
+
+## Markov chains in R
+
+A Markov chain is described by a "__markovchain__" object. We'll use the function `new` to create this type of objects by feeding it with the states' name and the transition matrix. Optionally, we can set a name for the chain.
+
+```{r}
+weather <- new("markovchain", name = "Simple weather model", 
+               states = c("W", "C"), transitionMatrix = P)
+weather
+summary(weather)
+plot(weather)
+```
+
+We cannot use the common multiplication `*` and exponentiation `^` operators with R matrices. The product of two matrices can be done as follows:
+
+```{r}
+P %*% P
+```
+
+And the matrix exponentiation is defined in the non-standard library `expm`:
+
+```{r}
+library(expm)
+
+P%^%4
+```
+
+However, a `markovchain` behaves like a transition matrix and accepts the common arithmetic operators. The following table lists the main operations defined over this object.
+
+Method | Result
+-------|----------
+`mcA * mcB` | Transition matrix multiplication
+`mcA^4` | Transition matrix exponentiation
+`mcA[1,]` | Accessing row 1 of the ransition matrix 
+`mcA[, 3]` | Accessing column 3 of the ransition matrix 
+`mcA[3, 2]` | Accessing element (3, 2) of the ransition matrix 
+`t(mcA)` | Transition matrix transposition
+`mcA == mcB` | Comparing two objects (states and matrix)
+`dim(mcA)` | Transition matrix dimension
+`states(mcA)` | Extracting the states
+
+Therefore, we can use this object directly to operate with the __Chapman-Kolmogorov__ equation:
+
+$$\pi^{(n)} = \pi^{(0)}P^n$$
+
+We start from the initial state "C" and obtain the probability distribution vector for $n = 6$:
+
+```{r}
+initialState <- c(0, 1)
+newState <- initialState * weather^6
+newState
+```
+
+Moreover, the `markovchain` object gives us a lot of useful information about the chain: irreducibility, accessibility, classes, types of states and so on and so forth.
+
+```{r}
+is.irreducible(weather)
+is.accessible(weather, from = "W", to = "C")
+period(weather)
+absorbingStates(weather)
+transientStates(weather)
+steadyStates(weather)
+```
+
+The more interesting part lies on the simulation and estimation capabilities of this library. Given a Markov chain, __simulation__ is performed in the same way as conventional random variables (`rnorm`, `rexp`, etc.) using the function `rmarkovchain`.
+
+Generation of 1000 random samples from the "weather" chain with random initial state:
+
+```{r}
+x <- rmarkovchain(1000, weather)
+```
+
+Generation of 1000 random samples with initial state "W":
+
+```{r}
+y <- rmarkovchain(1000, weather, t0 = "W")
+```
+
+__Estimation__ consists of fitting the transition probabilities from a vector of random samples. Fitting from the previous `x` vector is close to the original chain:
+
+```{r}
+weatherFit <- markovchainFit(x)
+plot(weatherFit$estimate)
+```
+
+## Convergence
+
+Given an irreducible and aperiodic Markov chain, it can be shown that there exists a single steady state to which the chain converges when $n\to\infty$ with independence of the initial state. Using our weather prediction model, let's illustrate this property by raising the transition matrix to a high enough power and observing that all rows of the resulting matrix tend to the steady state:
+
+```{r}
+is.irreducible(weather)
+weather^100
+steadyStates(weather)
+```
+
+What is that but to say, when simulating a Markov chain (obtaining random samples), that the states' ratio will be steady with a high enough number of samples.
+
+```{r}
+samples <- rmarkovchain(1000, weather)
+
+# Cummulative ratios
+## number of W days / number of transistions of the chain = prob of being at that state 
+yW <- cumsum(samples=="W") / seq_along(samples)
+yC <- cumsum(samples=="C") / seq_along(samples)
+# Evolution of the distribution of "W"
+plot(yW, type="l", col="red", ylim=c(0,1))
+# Evolution of the distribution of "C"
+lines(yC, col="green")
+# Theoretical values
+abline(steadyStates(weather)[1], 0, lty=2, col="red")
+abline(steadyStates(weather)[2], 0, lty=2, col="green")
+```
+
+The above figure shows that the simulation converge. But, which power is _high enough_?, how many samples are _sufficient_ to ensure a good approximation to the steady state? The key point here is the __convergence time__, which tells us the _speed_ of error decay.
+
+The error can be defined as the sum of the absolute differences between elements of two consecutive powers of the transition matrix, that is,
+
+$$\epsilon(n) = \sum_i\sum_j|\left(P^n\right)_{ij} - \left(P^{n-1}\right)_{ij}|$$
+
+Let's implement an R function to obtain this error.
+
+```{r}
+# Error function
+# @param n is the time (one value or a vector of values)
+# @param mc is the Markov chain
+err <- function(n, mc) {
+  
+  # Check that the input values are positive integers
+  if (!isTRUE(all(n > 0 && n == floor(n)))) 
+    stop("'n' must only contain positive integer values")
+  
+  # Reserve some memory for the result
+  res <- numeric(length(n))
+  
+  # For each n, calculate err(n)
+  for (i in 1:length(n)) {
+    Pn <- (mc^n[i])@transitionMatrix
+    Pn1 <- (mc^(n[i]-1))@transitionMatrix
+    res[i] <- sum(abs(Pn - Pn1))
+  }
+  return(res)
+}
+
+# Create an array of values
+x <- 1:10
+# Call the previously created function to calculate the error
+y <- err(x, weather)
+
+plot(x, y, type="o")
+```
+
+As can be seen, the error decays exponentially.
+
+# Continuous-time Markov Chains
+
+__Example 1__: A gas station has a single pump and no space for vehicles to wait (if a vehicle arrives and the pump is not available, it leaves). Vehicles arrive to the gas station following a Poisson process with a rate $\lambda$ of 3 every 20 minutes, of which $prob(c)=$ 75% are cars and $prob(m)=$ 25% are motorcycles. The refuelling time can be modelled with an exponential random variable with mean $1/\mu_c = 8$ minutes for cars and $1/\mu_m = 3$ minutes for motorcycles.
+
+__This__ __problem__ is described by the following continuous-time Markov chain:
+
+$$\xymatrix{
+*=<15mm,8mm>[o][F]{car} \ar@/^/[r]^{\mu_c} &
+*=<15mm,8mm>[o][F]{empty} \ar@/^/[l]^{\lambda \cdot prob(c)} \ar@/^/[r]^{\lambda \cdot prob(m)}  &
+*=<15mm,8mm>[o][F]{m/cycle} \ar@/^/[l]^{\mu_m}
+}\qquad\qquad
+Q = \begin{pmatrix}
+-1/8 & 1/8 & 0 \\
+0.75\cdot 3/20 & -3/20 & 0.25\cdot 3/20 \\
+0 & 1/3 & -1/3 
+\end{pmatrix}$$
+
+The chain is irreducible and recurrent. To theoretically find the steady state distribution, we have to solve the balance equations
+
+$$pQ = 0$$
+
+with the constraint
+
+$$\sum_i p_i = 1$$
+
+There are $\operatorname{dim}(Q)-1$ independent columns, so the latter constraint is equivalent to substitute any column by ones and match it to one at the other side of the equation, that is:
+
+$$p\begin{pmatrix}
+1 & 1/8 & 0 \\
+1 & -3/20 & 0.25\cdot 3/20 \\
+1 & 1/3 & -1/3 
+\end{pmatrix} = (1, 0, 0)$$
+The solution $p$ represents the probability of being at each state in the long-term. Therefore, we can calculate the average number of customers in the system by summing these probabilities multiplied by the number of customers at each state. In our case, $1\cdot p_1 + 0\cdot p_2 + 1\cdot p_3$.
+
+```{r}
+lambda <- 3/20    # Arrival rate
+mu <- c(1/8, 1/3) # Service rate (cars, motorcycles)
+p <- 0.75         # Probability of car
+
+A <- matrix(c(1,   mu[1],            0,
+              1, -lambda, (1-p)*lambda,
+              1,   mu[2],       -mu[2]), byrow=T, ncol=3)
+
+P <- solve(t(A), c(1, 0, 0))
+N_average_theor <- sum(P * c(1, 0, 1))
+N_average_theor
+```
+
+In the previous chunk, the `t` function trasposes the matrix to solve the system of equations using `solve`. See the help for more details.
+
+# Solving problems with R
+
+## Problem 1
+
+> _The cat and mouse problem_. Assume there are five boxes in a row, and there's a cat on the first one and a mouse on the last one. Each time interval $T$, each animal jumps to a box nearby, which is chosen at random (unless they are on the first or last box). The "game" ends when they both jump into the same box, for obvious reasons.  **Compute the average length of the game**.
+
+```{r, echo=FALSE, eval=FALSE}
+P <- matrix(data = c(0,    1,   0,    0,
+                     0.25, 0,   0.5, 0.25,
+                     0,    0.5, 0,    0.5,
+                     0,    0,   0,   1), 
+            ncol = 4, byrow = TRUE)
+
+catmouse <- new("markovchain", name = "Cat & Mouse problem", 
+                states = c("1,5", "2,4", "1,3,5", "End"), transitionMatrix = P)
+
+# 100 Run simulations of the chain
+simulations <-rmarkovchain(100, catmouse, t0 = "1,5")
+# Checks at which movement the game ends
+match("End", simulations)
+
+# Replicate previous steps to obtain an accurate value of how many steps do we need to reach the end of the game
+n15End <- replicate(100000, match("End", rmarkovchain(100, catmouse, t0 = "1,5")))
+mean(n15End) # ~4.5
+```
+
+
+## Problem 2
+
+> A wireless interface has three transmission rates, 1, 4 and 8 Mbps, that result in three frame loss probabilities, $p_1=1/2$, $p_4=1/2$ and $p_8=1/4$ respectively. The rate adaptation rate works as follows: whenever there is a loss, the transmission rate is set to 1 Mbps, while whenever there are two successess in a row, the transmission rate increases to the next available rate. **Compute the average transmission rate (in Mbps)**.
+
+```{r, echo=FALSE, eval=FALSE}
+library(expm)
+library(markovchain)
+
+initialState <- c(1, 0, 0, 0, 0)
+
+P <- matrix(
+  c(1/2, 1/2,   0,   0,   0,
+    1/2,   0, 1/2,   0,   0,
+    1/2,   0,   0, 1/2,   0,
+    1/2,   0,   0,   0, 1/2,
+    1/4,   0,   0,   0, 3/4),
+  ncol = 5, byrow = TRUE)
+
+chain <- new("markovchain", 
+             states = c("1.1", "1.2", "4.1", "4.2", "8"), 
+             transitionMatrix = P)
+
+# using markovchain object (which basically act as a transition matix)
+newState_2 <- initialState * chain^100
+rate_2 <- (1*(newState_2[1]+newState_2[2])) + (4*(newState_2[3]+newState_2[4])) + (8*newState_2[5])
+rate_2
+
+# alternatively apply function steadystates over the markovchain object
+sum(steadyStates(chain) * c(1, 1, 4, 4, 8))
+```
+
+## Problem 3
+
+>Assume a building with two elevators, each with a lifetime that can be modeled with an exponential random variable of average $1/\lambda$. There are two repair policies:
+>
+>* a)Maintenance is notified when the two elevators are broken, with the repair time of the two elevators (at the same time) being an exponential random variable of average $1/\mu$.
+>
+>* b)Maintenance is notified as soon as any elevator breaks, with the elevator repair time being an exponential random variable of average $2/\mu$ (i.e., twice the former), and only one elevator is repaired at a time.
+>
+>Calculate the proportion of time that the two elevators are running, if $1/\lambda = 2$~weeks and $1/\mu = 1$~week.
+
+```{r, echo=FALSE, eval=FALSE}
+lambda <- 1/2
+mu <- 1
+
+### a) ###
+##########
+# Q matrix with a column substitued by ones
+Q <- matrix(
+  c(1, 2*lambda, 0,
+    1, -lambda, lambda,
+    1, 0, -mu),
+  ncol = 3, byrow = TRUE)
+
+# We will traspose the matix in order to solve the system of equations using solve
+# Initial state 1, 0, 0
+P_a <- solve(t(Q), c(1, 0, 0))
+# Where both elevators are running
+P_a[1]
+
+
+### b) ###
+##########
+Q <- matrix(
+  c(1, 2*lambda, 0,
+    1, -lambda-(mu/2), lambda,
+    1, mu/2, -mu/2),
+  ncol = 3, byrow = TRUE)
+
+# Initial state 1, 0, 0
+P_b <- solve(t(Q), c(1, 0, 0))
+# Where both elevators are running
+P_b[1]
+
+```
+
+<!-- We next compute this result using simulations: -->
+
+```{r, echo=FALSE, eval=FALSE}
+library(simmer)
+library(simmer.plot)
+
+lambda <- 1/2
+mu <- 1
+
+### a) ###
+##########
+FAIL <- function() rexp(1, lambda)
+REPAIR <- function() rexp(1, mu)
+
+# Trajectory that an elevator follows
+# with batch we wait until both elevators are broken to call the repairperson
+elevator <- trajectory() %>%
+  seize("working") %>%
+  timeout(FAIL) %>%
+  release("working") %>%
+  batch(2) %>%
+  timeout(REPAIR) %>%
+  separate() %>%
+  rollback(6)
+
+# Building simulator
+building <- simmer() %>%
+  add_resource("working", capacity=Inf) %>%
+  add_generator("elevator", elevator, at(0, 0)) %>%
+  run(40000/lambda)
+
+building.df.res <- get_mon_resources(building)
+
+# Retrieve diff times between events
+deltas <- diff(building.df.res$time)
+# Compute array positions where both elevators were working and take their timestamps
+both_working <- which(building.df.res$system == 2)
+t_both_working <- deltas[both_working]
+# Compute the time by dividing the time where we had 2 elevators working over the total time
+## remove possible nan
+sum(t_both_working, na.rm=TRUE) / max(building.df.res$time)
+
+P_a[1]
+
+
+### b) ###
+##########
+FAIL <- function() rexp(1, lambda)
+REPAIR <- function() rexp(1, mu/2)
+
+# here we can only repair one elevator each time, that is why repairperson is a shared resource
+elevator_2 <- trajectory() %>%
+  seize("working_2") %>%
+  timeout(FAIL) %>%
+  release("working_2") %>%
+  seize("repairperson") %>%
+  timeout(REPAIR) %>%
+  release("repairperson") %>%
+  rollback(6)
+
+building_2 <- simmer() %>%
+  add_resource("working_2", capacity=Inf) %>%
+  add_resource("repairperson", capacity=1, queue_size=Inf) %>%
+  add_generator("elevator_2", elevator_2, at(0, 0)) %>%
+  run(40000/lambda)
+
+# Since we have now two resources, it is required to select only those related to working_2
+building_2.df.res <- get_mon_resources(building_2)%>%
+  subset(resource == "working_2")
+
+# Retrieve an array of timestamps
+deltas_2 <- diff(building_2.df.res$time)
+# Compute array positions where both elevators were working
+both_working_2 <- which(building_2.df.res$system == 2)
+t_both_working_2 <- deltas_2[both_working_2]
+# Compute the time by dividing the time where we had 2 elevators working over the total time
+sum(t_both_working_2, na.rm=TRUE) / max(building_2.df.res$time)
+
+P_b[1]
+
+```

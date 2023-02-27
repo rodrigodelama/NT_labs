@@ -1,0 +1,534 @@
+---
+title: "Networks Theory - Lab 2"
+author: "Pablo Serrano, Ginés García Avilés, Iñaki Úcar, José Alberto Hernández"
+date: "March 8th, 2021"
+output:
+  html_document:
+    number_sections: yes
+    toc: true
+    toc_float:
+      collapsed: false
+    theme: united
+    highlight: textmate
+---
+
+```{r, echo = FALSE, message = FALSE}
+knitr::opts_chunk$set(fig.align = "center")
+set.seed(42)
+```
+
+Licensed under a [Creative Commons BY-NC-SA 4.0 License](http://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+# The exponential random variable
+
+## Review of descriptive statistics
+
+We next review the basic tools that can be used to describe a random variable for the case of the exponential random variable. We generate 1000 samples from an $\mathrm{Exp}(5)$ (exponential with `mean = 5`). Note that `rexp` takes as input parameter the "rate", i.e., the "lambda":
+
+```{r}
+x <- rexp(1000, rate=1/5) # rate = lambda = 1/mean
+plot(x)
+summary(x)
+```
+
+Estimation of the density function $f(x)$:
+
+```{r}
+plot(density(x), ylim=c(0,0.5))
+
+# Theoretical f(x)
+curve(dexp(x, 1/5), add=TRUE, lty=2, col="red")
+```
+
+Cummulative Distribution Function (CDF):
+
+```{r}
+# Fx is a function representing the empirical CDF of x
+Fx <- ecdf(x)
+# Returns the empirical CDF at zero (should be 0 because we have samples from an exponential R.V.)
+Fx(0)
+plot(x, Fx(x))
+
+# Theoretical CDF
+curve(pexp(x, 1/5), add=TRUE, lty=2, col="red")
+```
+
+For the case of the exponential random variable, the CCDF (_Complementary_ CDF, also known as Survival Function) results very convenient. This is because $F^C(x)$ is given by
+
+$$F^C(x) = S(x) = 1 - F(x) = 1 - \left(1-e^{-\lambda x}\right) = e^{-\lambda x}$$
+
+and therefore, using a logarithmic scale, it results in a linear function proportional to the exponential rate:
+
+$$\log F^C(x) = -\lambda x$$
+
+The survival function or CCDF:
+
+```{r}
+plot(x, 1-Fx(x))
+```
+
+Or using a logarithmic scale:
+
+```{r}
+plot(x, log(1-Fx(x)))
+```
+
+Now, we can estimate the slope ($\lambda$) using a linear regression. (What is a _linear regression_? [Some theory](https://en.wikipedia.org/wiki/Linear_regression) and [a video](https://www.youtube.com/watch?v=zPG4NjIkCjc)).
+
+```{r}
+logCCDF <- log(1 - Fx(x))
+# Given that the last value of the CDF is 1, the last value of the CCDF
+# will be 0, that after the logarithm will result in a -\infinity.
+# Therefore we remove all these values
+x <- x[is.finite(logCCDF)]
+logCCDF <- logCCDF[is.finite(logCCDF)]
+
+# Linear regression to estimate the slope and summary of its values
+fit <- lm(logCCDF ~ x)
+summary(fit)
+# Plot of the resulting line
+plot(x, logCCDF)
+abline(fit$coefficients, lty=2, col="red")
+```
+
+The use of `summary` provides a lot of numerical results. Out of these, some of the most important are the parameters of the regression line (a+bx) --try to identify them. Also, some of the numberical parametes are provided with statistical information, regarding the goodness of the fit, i.e., the _significance_ of the parameter, which is measured with the _p-value_ (the smaller the p-value, the better the fit). 
+
+
+## Memorylessness property
+
+A random variable $X$ has no memory if the following holds:
+
+$$\Pr(X > t+s \mid X>s) = \Pr(X > t)$$
+
+It is relatively easy to confirm that the uniform random variable does have memory. To start with, we generate 1000 samples from a $\mathrm{U}(0,10)$, and depict its survival function (i.e., the complementary cummulative distribution function)
+
+```{r}
+x <- runif(1000, 0, 10)
+Fu <- ecdf(x)
+plot(sort(x), 1-Fu(sort(x)))
+```
+
+If we now take the subset of samples larger than $s=2$ and substract 2 from them, we can confirm that the resulting survival function is different
+
+```{r}
+x2 <- x[x>2]-2
+Fu2 <- ecdf(x2)
+plot(sort(x), 1-Fu(sort(x)))
+points(sort(x2), 1-Fu2(sort(x2)), col="red")
+```
+
+The same procedure can be repeated for the case of an exponential random variable, this resulting in relatively similar survival functions:
+```{r}
+x <- rexp(1000, 1/5)
+x2 <- x[x>5] - 5
+Fu <- ecdf(x)
+plot(sort(x), 1-Fu(sort(x)))
+Fu2 <- ecdf(x2)
+points(sort(x2), 1-Fu2(sort(x2)), col="red")
+```
+
+That can be further confirmed using a `qqplot`
+
+```{r}
+qqplot(x, x2)
+abline(0, 1, lty=2, col="red")
+```
+
+
+## Minimum of two exponentials
+
+We generate two set of samples, $X \sim \mathrm{Exp}(5), Y \sim \mathrm{Exp}(10)$. To generate the new random variable $Z \sim \min\{X, Y\}$, we make use of the function `pmin`:
+
+```{r}
+x <- rexp(1000, 1/5)
+y <- rexp(1000, 1/10)
+z <- pmin(x, y)
+```
+
+We can confirm that not only $X$ and $Y$, but also $Z$ have a density function similar to that of an exponential random variable. 
+```{r}
+plot(density(x), ylim=c(0,0.3))
+lines(density(y), col='blue')
+lines(density(z), col='red')
+```
+
+and the average of $Z$ is very similar to the one expected
+```{r}
+mean(z)
+```
+
+
+We can also repeat the procedure above, i.e., compute the logarithm of the survival function, which should follow a line, and then estimate $Z$'s $\lambda$ parameter via a linear regression:
+
+```{r}
+Fx <- ecdf(z)
+logCCDF <- log(1 - Fx(z))
+z <- z[is.finite(logCCDF)]
+logCCDF <- logCCDF[is.finite(logCCDF)]
+
+fit <- lm(logCCDF ~ z)
+plot(z, logCCDF)
+abline(fit$coefficients, lty=2, col="red")
+```
+
+whose slope approximately matches the theoretical value: the new rate is the sum of the rates, $\lambda_z =\sum \lambda_i = \frac{1}{5}+\frac{1}{10}=0.3$.
+
+```{r}
+-fit$coefficients["z"]
+```
+
+
+
+# Poisson processes
+
+## Generating Poisson arrival process
+
+We next verify that both the first and the second definition of a Poisson process serve to generate it. To this aim, we will first generate an arrival process following the second definition, and confirm that it is a Poisson process via the first definition, and then proceed in the other direction: generate a process following the first definition, and confirm that it is a Poisson process via the first definition. 
+
+### From 2nd def. to 1st def. 
+
+
+According to the exponential definition (***second definition***), a Poisson arrival process is composed of inter-arrival times that follow an exponentially distributed random variable with average $1/\lambda$. That is, given exponentially distributed inter-arrivals at a rate $\lambda$, the number of arrivals in an interval of length $t$ follows a Poisson distribution with parameter $\lambda t$.
+
+Below, we generate 1000 exponentially distributed samples (i.e., inter-arrival times). The cumulative sum of that sample corresponds to the absolute arrival times:
+
+```{r}
+inter <- rexp(1000, 2)
+llegadas <- cumsum(inter)
+```
+
+This step completes the generation of the process. It can be verified that, given that 1000 times between arrivals of average 1/2 have been generated, the last arrival (the last position of the vector) will have occurred near instant 500. 
+
+```{r}
+llegadas[length(llegadas)] # another option: max(llegadas)
+```
+
+
+Next, we check by means of the first definition that this vector contains the arrival times of a Poisson arrival process. According to the first definition, the number of events $n$ that occur in an interval of length $t$ should follow a discrete Poisson variable of mean $\lambda t$.
+
+To obtain a sequence with different realizations of the number of events $n$ of an interval of a given size, three steps are performed:
+1) We divide the total time into intervals of a given length (e.g., 1) with the command `seq`
+2) Each arrival is assigned to one of these intervals with the command `cut`
+3) The number of "assignments" per interval is counted with `tabulate`
+
+```{r}
+intervalos <- seq(0, max(llegadas), 1) # Intervalos de longitud 1
+asignacion <- cut(llegadas, intervalos)
+n_llegadas <- tabulate(asignacion)
+```
+
+The resulting histogram can be compared with the expected theoretical value using the following commands
+```{r}
+hist(n_llegadas,probability=TRUE, breaks=seq(-0.5, 10.5, 1))
+lines(0:10, dpois(0:10, 2), type = "h", lwd = 2, col="red")
+```
+
+You could also compare the resulting vector with one generated by the` rpois` function using a `qqplot` (although the use of qqplot with discrete variables is not that common)
+
+```{r}
+qqplot(n_llegadas, rpois(1000, 2 * 1))
+abline(0, 1, lty=2, col="red")
+```
+
+> **Repeat the above (generation of arrival times and comparison with a Poisson process) for different values of $\lambda$ and $t$.**
+
+
+### From 1st def. to the 2nd def. 
+
+According to the first definition, given a time interval of length $ t $ and an arrival rate $\lambda $, a Poisson variable of mean $\lambda t$ can be used to obtain a random number of arrivals in that interval.
+```{r}
+N <- 1000 # Intervals
+lambda <- 2
+t <- 1
+n <- rpois(N, lambda * t)
+```
+
+To obtain at what specific instant these arrivals are located, they are randomly placed (as seen in the the conditional distribution of the instant of an arrival), which are ordered from lowest to highest before incorporating them into the general arrivals vector
+```{r}
+llegadas <- c()
+for (i in seq(1,N)) { 
+  llegadas_intervalo <- runif(n[i], (i-1)*t, i*t)
+  llegadas <- c(llegadas, sort(llegadas_intervalo))
+}
+```
+
+Next, we check by means of the second definition that the vector contains arrival times of a Poisson process. To this aim, the times between arrivals are computed and it is verified that they follow an exponential:
+
+```{r}
+inter <- diff(llegadas)
+mean(inter)
+plot(density(inter), ylim=c(0,lambda))
+curve(dexp(x, lambda), add=TRUE, lty=2, col="red")
+```
+
+
+> **Repeat the above for different values of $\lambda$ and $t$.**
+
+
+## Aggregating and sampling Poisson processes
+
+As seen in the previous section, when working with Poisson processes it is usually more convenient to operate with the times between arrivals (that is, exponential random variables). Next, the aggregation and decomposition properties of Poisson processes, and the Palm-Khintchine theorem, are illustrated.
+
+### Aggregation
+
+Two Poisson processes are generated, each one with a different rate
+
+```{r}
+N <- 2000
+lambda1 <- 1
+inter1 <- rexp(N, lambda1)
+times1 <- cumsum(inter1)
+
+lambda2 <- 3
+inter2 <- rexp(N, lambda2)
+times2 <- cumsum(inter2)
+```
+
+Since the same number of samples has been generated, one vector has a greater duration than the other in time, so they are limited to the minimum:
+```{r}
+max(times1); max(times2)
+tmax = min(max(times1), max(times2))
+
+times1 <- times1[times1 < tmax]
+times2 <- times2[times2 < tmax]
+```
+
+To add two processes, just join the vectors and order them:
+```{r}
+llegadas <- sort(c(times1, times2))
+```
+
+It can be verified that the times between arrivals follow an exponential with rate equal to the sum of the rates
+```{r}
+inter <- diff(llegadas)
+mean(inter)
+plot(density(inter), ylim=c(0,lambda1+lambda2))
+curve(dexp(x, lambda1+lambda2), add=TRUE, lty=2, col="red")
+```
+
+And for extra rigor, the resulting distribution can be compared with the theoretical one, using a qqplot:
+```{r}
+qqplot(inter, rexp(length(inter), lambda1 + lambda2))
+abline(0, 1, lty=2, col="red")
+```
+
+
+### Sampling
+
+Let us start with a Poisson process at rate 4:
+```{r}
+N <- 2000
+lambda <- 4
+inter <- rexp(N, lambda)
+llegadas <- cumsum(inter)
+```
+
+One approach to sample e.g. 1/4 of the samples at random, is to first generate a vector of indices where each value is true with probability 1/4, and then use that vector to select the samples:
+```{r}
+prob <- 1/4
+indices <- runif(length(llegadas)) < prob
+llegadas_subset <- llegadas[indices]
+```
+
+It can be verified that the time between arrivals follows an exponential of average the expected one, for example with a qqplot:
+```{r}
+interarrivals <- diff(llegadas_subset)
+qqplot(interarrivals, rexp(length(interarrivals), lambda*prob))
+abline(0, 1, lty=2, col="red")
+```
+
+
+### Palm-Khintchine theorem
+
+The time between arrivals in a process, in general, does not have to be exponential. Take, for example, a voice over IP (VoIP) encoder that generates a frame every 10~ms, but with a certain randomness that the time between frames follows a uniform random variable between 8~ms and 12~ms.
+
+```{r}
+interu <- runif(1000, 8, 12)
+timesu <- cumsum(interu)
+```
+
+Obviously, the density function of the time between arrivals is far from the exponential:
+```{r}
+plot(density(interu))
+```
+
+And the number of arrivals in time windows of a fixed length (for example, 15), does not follow a Poisson variable
+```{r}
+intervalos <- seq(0, max(timesu), 15) # Intervalos de longitud 15
+asignacion <- cut(timesu, intervalos)
+n_llegadas <- tabulate(asignacion)
+hist(n_llegadas,probability=TRUE, breaks=seq(-0.5, 4.5, 1))
+```
+
+> **Try changing the length of the interval and see the impact on the resulting histogram**
+
+
+However, adding a **sufficient** number of arrival processes tends to behave like a Poisson process, so the time between arrivals will resemble an exponential time between arrivals. Let us consider the aggregation of four processes like the previous one
+```{r}
+llegadasu1 <- cumsum(runif(1000, 8, 12))
+llegadasu2 <- cumsum(runif(1000, 8, 12))
+llegadasu3 <- cumsum(runif(1000, 8, 12))
+llegadasu4 <- cumsum(runif(1000, 8, 12))
+
+llegadas <- sort(c(llegadasu1, llegadasu2, llegadasu3, llegadasu4))
+```
+
+In this case, the time between arrivals begins to resemble that of an exponential random variable, as it has a bias towards smaller values.
+```{r}
+interarrivals <- diff(llegadas)
+plot(density(interarrivals), ylim=c(0,0.4))
+curve(dexp(x, 0.4), add=TRUE, lty=2, col="red")
+```
+
+Although the `qqplot` shows that for four processes are too few to have a high similarity with an exponential random variable:
+```{r}
+qqplot(interarrivals, rexp(length(interarrivals), 0.4))
+abline(0, 1, lty=2, col="red")
+```
+
+
+You can try to add more processes and check the resemblance to the corresponding exponential
+```{r}
+Ntotal <- 20
+RateUno <- 1/((8+12)/2) # Tasa de llegadas de un proceso
+llegadas_total <- c()
+for (i in seq(1,Ntotal)) { 
+  #llegadas <- cumsum(runif(1000, 8, 12))
+  llegadas <- cumsum(rnorm(1000, 10, 1))
+  llegadas_total <- sort(c(llegadas_total, llegadas))
+}
+
+
+interarrivals <- diff(llegadas_total)
+qqplot(interarrivals, rexp(length(interarrivals), Ntotal*RateUno))
+abline(0, 1, lty=2, col="red")
+```
+
+> **Try changing the number of aggregated processes and/or the random variable of the time between arrivals (e.g., the limits of the uniform v.a.), to see the impact on the distribution of the times between arrivals**
+
+
+
+# Solving problems with R
+
+## Problem 2.7
+
+>Assume that the network delay can be modeled with an exponential random variable with an average of 10ms. Compute the average delay of the dataframes with a delay bigger than 50ms.
+
+We just need to generate the random variable and calculate the mean of the subset of values greater than 50
+
+```{r}
+N <- 100000
+lambda <- 1/10
+x <- rexp(N, lambda)
+x50 <- x[x>50]
+mean(x50)
+```
+
+## Problema 2.9
+
+
+> The lifetime of a hard disk (HD) can be modeled with an exponential random variable of mean $1/\lambda$. You want to store 2 TB of information. There are two configurations for the hard drives:
+> * In the RAID~0 (Data Striping) configuration there is no redundancy and the total capacity is the sum of the capacities: if any disk goes bad, the information is lost.
+> * In RAID~1 (Mirroring) configuration the same information is copied to all disks and the total capacity matches that of one disk: only when no disk works, the information is lost.
+> You need to know the probability that the 2~TB of information is available after one year of use for the following options:
+
+> (a) 1 HD of 2TB, average lifetime per disk: $1/\lambda=$ 2~years
+
+For this case, it is enough to calculate the number of times that an exponential of average 2 years exceeds one year
+
+```{r}
+required_lifetime <- 1
+lambda <- 1/2
+N <- 10000
+hd_1 <- rexp(N, lambda)
+survived <- hd_1[hd_1 > required_lifetime]
+
+length(survived)/N
+```
+
+
+
+> (b) 2 HDs of 1TB each, RAID0, average lifetime per disk $1/\lambda=$ 1~year
+
+In this case we need both hard drives to have survived at least one year
+```{r}
+N <- 10000
+required_lifetime <- 1
+lambda <- 1
+hd_1 <- rexp(N, lambda)
+hd_2 <- rexp(N, lambda)
+
+sobreviven = (hd_1 > required_lifetime) & (hd_2 > required_lifetime)
+survived <- sum(sobreviven, na.rm = TRUE)
+survived/N
+```
+
+
+> (c) 2 HDs of 2TB each, RAID1, average lifetime $1/\lambda=$ 1~year
+
+```{r}
+N <- 10000
+required_lifetime <- 1
+lambda <- 1
+hd_1 <- rexp(N, lambda)
+hd_2 <- rexp(N, lambda)
+
+sobreviven = (hd_1 > required_lifetime) | (hd_2 > required_lifetime)
+survived <- sum(sobreviven, na.rm = TRUE)
+survived/N
+```
+
+
+
+
+## Problema 3.8 
+
+
+> A given application generates frames following a Poisson process with rate  $\lambda=$~2~frames/s. To maintain synchronization, the wireless interface generates a frame if if does not detect any apprication traffic during a timeout of $Timeout=1$~s. Compute the resulting frame transmission rate, and discuss whether or not the process is Poissonian
+
+One way to simulate the frame generation process is to start from several samples of an exponential random variable of mean 1/2. These samples will be the times between arrivals if they are less than  $Timeout=$~1, otherwise an arrival must be added. First, the application arrival process is generated
+```{r}
+N <- 2000
+lambda <- 2
+inter <- rexp(N, lambda)
+llegadas <- cumsum(inter)
+```
+
+Next, we go through this process, and in case more there is more than $Timeout$ between one arrival and the next, we insert as many frames are required:
+```{r}
+Timeout <- 1
+salidas_interfaz <- c()
+t_now <- 0
+for (t_llegada in llegadas) {
+  if (t_llegada - t_now < Timeout) { # Llega antes del umbral
+    salidas_interfaz <- c(salidas_interfaz, t_llegada)
+  } else { # Llega tarde, hay que ver cuanto de tarde
+    n_thresholds <- floor((t_llegada-t_now)/Timeout)
+    t_generados <- t_now + seq(1,n_thresholds)*Timeout
+    salidas_interfaz <- c(salidas_interfaz, t_generados, t_llegada)
+  }
+  t_now <- t_llegada
+}
+```
+
+
+It can be verified that the mean time between frames is less than in the previous case, and the frame generation rate is higher
+```{r}
+iarrival_salida <- diff(salidas_interfaz)
+mean(iarrival_salida)
+1/mean(iarrival_salida)
+```
+
+Finally, we can confirm that the time between arrivals is far from following an exponential random variable, since there is an accumulation of values in $Timeout$.
+```{r}
+plot(density(iarrival_salida), ylim=c(0, 1/mean(iarrival_salida)))
+curve(dexp(x, 1/mean(iarrival_salida)), add=TRUE, lty=2, col="red")
+```
+
+Using a `qqplot` the difference is also evident:
+```{r}
+qqplot(iarrival_salida, rexp(length(iarrival_salida), 1/mean(iarrival_salida)))
+abline(0, 1, lty=2, col="red")
+```
+
+
